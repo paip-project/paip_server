@@ -1,80 +1,133 @@
 # PAIP Server
 
-**Personal Agent Identification Protocol (PAIP) Server** - An open-source framework for verifying that automated agents represent authenticated, real humans when interacting with web APIs.
+**Reference implementation of the Personal Agent Identification Protocol (PAIP)** - A certificate-based framework for verifying that AI agents represent authenticated, real humans when interacting with web APIs.
 
-## Overview
+## The Problem
 
-PAIP enables websites to become "agent-ready" by providing a standardized way to:
+As AI agents become capable of booking appointments, making purchases, and accessing services on behalf of users, websites face a critical question: **how do they know an agent represents a real person?**
 
-1. **Discover** - Agents learn what identity verification a website requires
-2. **Handshake** - Agents exchange identity provider tokens for PAIP session tokens
-3. **Verify** - Websites verify that API requests come from verified humans
+PAIP solves this using a model inspired by TLS/SSL certificates - Identity Providers act as Certificate Authorities, issuing credentials that prove an agent belongs to a verified human.
 
-See [PROTOCOL.md](PROTOCOL.md) for the full protocol specification.
+## Protocol Specification
+
+**[Read the full PAIP Protocol Specification →](PROTOCOL.md)**
+
+The protocol specification covers:
+- Certificate format and lifecycle (90-day validity)
+- Identity Provider requirements (JWKS, CRL, OCSP)
+- Handshake flow with cryptographic proof-of-possession
+- Session token format
+- Security considerations
+
+## How It Works
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        PAIP Certificate-Based Flow                       │
+└──────────────────────────────────────────────────────────────────────────┘
+
+1. ONE-TIME SETUP (User verifies identity with IdP)
+   ┌────────┐                          ┌─────────────────┐
+   │  User  │ ──── Verify identity ───>│ Identity        │
+   │        │      (docs + liveness)   │ Provider (IdP)  │
+   │        │                          │                 │
+   │ Agent  │ ──── Register agent ────>│ Issues 90-day   │
+   │        │      public key          │ certificate     │
+   └────────┘                          └─────────────────┘
+
+2. HANDSHAKE (Agent proves it holds valid certificate)
+   ┌────────┐                          ┌─────────────────┐
+   │ Agent  │ ──── Certificate + ─────>│   PAIP Server   │
+   │        │      Signature           │                 │
+   │        │                          │ • Verify cert   │
+   │        │ <─── Session token ──────│ • Check CRL     │
+   │        │      (1 hour)            │ • Verify sig    │
+   └────────┘                          └─────────────────┘
+
+3. API ACCESS (Agent uses session token)
+   ┌────────┐                          ┌─────────────────┐
+   │ Agent  │ ──── API request + ─────>│    Website      │
+   │        │      session token       │    Backend      │
+   │        │                          │                 │
+   │        │ <─── Response ───────────│ Verifies token  │
+   └────────┘                          └─────────────────┘
+```
+
+### Key Security Properties
+
+| Attack | Protection |
+|--------|------------|
+| Certificate theft | Useless without agent's private key |
+| Session token theft | Limited to 1 hour, single website |
+| Replay attacks | Timestamp + nonce in handshake |
+| Compromised certificate | Instant revocation via CRL/OCSP |
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.11+
-- Docker and Docker Compose (for containerized deployment)
-- [SOPS](https://github.com/getsops/sops) (for secrets management)
-- [age](https://github.com/FiloSottile/age) (for encryption)
+- Docker and Docker Compose (optional)
 
-### Local Development Setup
-
-1. **Clone and create virtual environment:**
+### Local Development
 
 ```bash
+# Clone and setup
 git clone https://github.com/your-org/paip-server.git
 cd paip-server
-
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -e ".[dev]"
-```
 
-2. **Generate signing keys:**
-
-```bash
+# Generate signing keys
 python -m paip.main generate-keys
-```
 
-This creates `keys/private.pem` and `keys/public.pem`.
-
-3. **Run the server:**
-
-```bash
+# Run server
 python -m paip.main serve --reload
 ```
 
-The server will start at `http://localhost:8080`.
-
-4. **Test the health endpoint:**
+### Test the Handshake
 
 ```bash
+# Health check
 curl http://localhost:8080/health
+
+# See test_handshake.py for full certificate-based flow example
 ```
 
-### Docker Deployment
+## API Reference
 
-1. **Generate keys (if not already done):**
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check |
+| `GET` | `/.well-known/jwks.json` | PAIP server's public keys |
+| `POST` | `/handshake` | Exchange certificate for session token |
+| `POST` | `/verify` | Verify a session token |
 
-```bash
-mkdir -p keys
-python -m paip.main generate-keys
+### Handshake Request (v2.0)
+
+```json
+{
+  "certificate": "<agent certificate JWT from IdP>",
+  "audience": "https://example-clinic.com",
+  "timestamp": "2025-01-04T15:30:00Z",
+  "nonce": "random-unique-string",
+  "signature": "<agent signs {audience}|{timestamp}|{nonce}>"
+}
 ```
 
-2. **Start with Docker Compose:**
+### Handshake Response
 
-```bash
-docker compose up -d
-```
-
-For development with hot reload:
-
-```bash
-docker compose --profile dev up paip-server-dev
+```json
+{
+  "success": true,
+  "session_token": "<PAIP session token>",
+  "expires_at": "2025-01-04T16:30:00Z",
+  "claims": {
+    "verified_human": true,
+    "full_name": "Jane Doe"
+  }
+}
 ```
 
 ## Configuration
@@ -92,136 +145,31 @@ keys:
   key_id: "key-1"
 
 identity_providers:
-  - id: healthverify
-    plugin: healthverify
-    config:
-      verification_endpoint: "https://api.healthverify.com/verify"
-      # API key loaded from secrets
+  - id: mock
+    plugin: mock
+    config: {}
 
 sites:
-  - audience: "https://drsmith-derm.com"
-    name: "Dr. Smith's Dermatology"
+  - audience: "https://example-clinic.com"
+    name: "Example Clinic"
     trusted_providers:
-      - healthverify
+      - mock
     required_claims:
       - verified_human
-      - full_name
-```
-
-### Secrets Management with SOPS
-
-PAIP uses [SOPS](https://github.com/getsops/sops) to manage sensitive configuration like API keys.
-
-#### Initial Setup with age
-
-1. **Install age and SOPS:**
-
-```bash
-# macOS
-brew install age sops
-
-# Linux
-# Download from https://github.com/FiloSottile/age/releases
-# Download from https://github.com/getsops/sops/releases
-```
-
-2. **Generate an age key:**
-
-```bash
-age-keygen -o ~/.config/sops/age/keys.txt
-```
-
-3. **Get your public key:**
-
-```bash
-age-keygen -y ~/.config/sops/age/keys.txt
-# Output: age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-4. **Update `.sops.yaml` with your public key:**
-
-```yaml
-creation_rules:
-  - path_regex: config/secrets\.yaml$
-    age: >-
-      age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-5. **Create and encrypt secrets:**
-
-```bash
-# Create secrets file from example
-cp config/secrets.example.yaml config/secrets.yaml
-
-# Edit with your real values
-nano config/secrets.yaml
-
-# Encrypt in place
-sops -e -i config/secrets.yaml
-```
-
-6. **To edit encrypted secrets:**
-
-```bash
-sops config/secrets.yaml
-```
-
-7. **For Docker deployment, decrypt to a separate file:**
-
-```bash
-sops -d config/secrets.yaml > config/secrets.decrypted.yaml
-```
-
-Then set `PAIP_SECRETS_PATH=config/secrets.decrypted.yaml` in your environment.
-
-## API Reference
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Health check |
-| `GET` | `/.well-known/jwks.json` | Public keys for token verification |
-| `POST` | `/handshake` | Exchange IdP token for session token |
-| `POST` | `/verify` | Verify a session token |
-
-### Handshake
-
-```bash
-curl -X POST http://localhost:8080/handshake \
-  -H "Content-Type: application/json" \
-  -d '{
-    "idp": "https://mock.paip.local",
-    "idp_token": "any-token-for-mock",
-    "audience": "https://example-clinic.com"
-  }'
-```
-
-### Verify Token
-
-```bash
-curl -X POST http://localhost:8080/verify \
-  -H "Content-Type: application/json" \
-  -d '{
-    "token": "<session-token-from-handshake>"
-  }'
 ```
 
 ## Creating IdP Plugins
 
-To add support for a new identity provider, create a plugin in `src/paip/plugins/`:
+To add support for a new identity provider, implement the `PAIPIdentityPlugin` interface:
 
 ```python
-# src/paip/plugins/myidp.py
-
-from paip.plugin_interface import PAIPIdentityPlugin, VerificationResult
-import httpx
+from paip.plugin_interface import (
+    PAIPIdentityPlugin,
+    CertificateVerificationResult,
+    RevocationCheckResult,
+)
 
 class MyIdPPlugin(PAIPIdentityPlugin):
-    def __init__(self, api_key: str, endpoint: str):
-        self._api_key = api_key
-        self._endpoint = endpoint
-
     @property
     def issuer(self) -> str:
         return "https://myidp.com"
@@ -233,97 +181,42 @@ class MyIdPPlugin(PAIPIdentityPlugin):
     def get_supported_claims(self) -> list[str]:
         return ["verified_human", "full_name", "email"]
 
-    async def verify_token(self, token: str) -> VerificationResult:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                self._endpoint,
-                headers={"Authorization": f"Bearer {self._api_key}"},
-                json={"token": token}
-            )
+    async def get_jwks(self) -> dict:
+        # Fetch IdP's public keys
+        ...
 
-            if response.status_code != 200:
-                return VerificationResult(
-                    success=False,
-                    error="Verification failed"
-                )
+    async def verify_certificate(self, certificate: str) -> CertificateVerificationResult:
+        # Verify certificate signature using IdP's public key
+        # Check expiration
+        # Extract agent public key and claims
+        ...
 
-            data = response.json()
-            return VerificationResult(
-                success=True,
-                subject=data["user_id"],
-                claims={
-                    "verified_human": data["verified"],
-                    "full_name": data["name"],
-                    "email": data["email"]
-                }
-            )
-
-def create_plugin(config: dict) -> MyIdPPlugin:
-    return MyIdPPlugin(
-        api_key=config["api_key"],
-        endpoint=config["verification_endpoint"]
-    )
-```
-
-Then add to your configuration:
-
-```yaml
-identity_providers:
-  - id: myidp
-    plugin: myidp
-    config:
-      verification_endpoint: "https://api.myidp.com/verify"
-      api_key: "${MYIDP_API_KEY}"  # From secrets
-```
-
-## Development
-
-### Running Tests
-
-```bash
-pytest
-```
-
-With coverage:
-
-```bash
-pytest --cov=paip --cov-report=html
-```
-
-### Linting and Type Checking
-
-```bash
-ruff check src tests
-ruff format src tests
-mypy src
+    async def check_revocation(self, jti: str, crl_url: str | None) -> RevocationCheckResult:
+        # Check if certificate is on the CRL
+        ...
 ```
 
 ## Project Structure
 
 ```
 paip_server/
+├── PROTOCOL.md              # Protocol specification
+├── README.md
 ├── src/paip/
-│   ├── __init__.py
-│   ├── main.py           # CLI entry point
-│   ├── server.py         # FastAPI application
-│   ├── config.py         # Configuration loading
-│   ├── models.py         # Pydantic models
-│   ├── tokens.py         # JWT handling
-│   ├── plugin_interface.py  # IdP plugin ABC
+│   ├── server.py            # FastAPI application
+│   ├── models.py            # Request/response models
+│   ├── tokens.py            # JWT + signature utilities
+│   ├── plugin_interface.py  # IdP plugin interface
 │   └── plugins/
-│       ├── __init__.py
-│       └── mock.py       # Mock IdP for testing
+│       └── mock.py          # Mock IdP for testing
 ├── config/
-│   ├── paip.yaml         # Main configuration
-│   └── secrets.example.yaml
-├── tests/
-├── keys/                 # Generated signing keys (gitignored)
-├── PROTOCOL.md          # Protocol specification
-├── Dockerfile
-├── docker-compose.yaml
-├── pyproject.toml
-└── README.md
+│   └── paip.yaml            # Server configuration
+└── keys/                    # Signing keys (gitignored)
 ```
+
+## Related Projects
+
+- **[Arbor ID](../arbor_id)** - A PAIP-compatible Identity Provider that verifies humans via document + liveness checks
 
 ## License
 
