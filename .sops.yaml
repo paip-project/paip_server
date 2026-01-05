@@ -1,0 +1,16 @@
+# SOPS Configuration
+# See: https://github.com/getsops/sops
+
+creation_rules:
+  # Encrypt secrets files with age
+  - path_regex: config/secrets\.yaml$
+    age: >-
+      age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+  # Alternative: Use AWS KMS
+  # - path_regex: config/secrets\.yaml$
+  #   kms: 'arn:aws:kms:us-east-1:123456789:key/abcd-1234-...'
+
+  # Alternative: Use GCP KMS
+  # - path_regex: config/secrets\.yaml$
+  #   gcp_kms: projects/my-project/locations/global/keyRings/my-ring/cryptoKeys/my-key

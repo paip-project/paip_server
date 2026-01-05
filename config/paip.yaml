@@ -1,0 +1,33 @@
+# PAIP Server Configuration
+# See PROTOCOL.md for documentation
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+keys:
+  private_key_path: "keys/private.pem"
+  public_key_path: "keys/public.pem"
+  key_id: "key-1"
+
+# Identity Providers
+# Each IdP requires a plugin that implements the PAIPIdentityPlugin interface
+identity_providers:
+  - id: mock
+    plugin: mock
+    config:
+      mock_claims:
+        verified_human: true
+        full_name: "Test User"
+        email: "test@example.com"
+
+# Sites Configuration
+# Each site is a website that uses this PAIP server for agent verification
+sites:
+  - audience: "https://example-clinic.com"
+    name: "Example Clinic"
+    trusted_providers:
+      - mock
+    required_claims:
+      - verified_human
+      - full_name

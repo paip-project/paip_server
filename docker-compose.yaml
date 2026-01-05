@@ -1,0 +1,44 @@
+# PAIP Server Docker Compose
+version: "3.8"
+
+services:
+  paip-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount configuration
+      - ./config:/app/config:ro
+      # Mount keys (generated separately)
+      - ./keys:/app/keys:ro
+    environment:
+      - PAIP_CONFIG_PATH=/app/config/paip.yaml
+      - PAIP_SECRETS_PATH=/app/config/secrets.decrypted.yaml
+      - PAIP_LOG_LEVEL=INFO
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Development service with hot reload
+  paip-server-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./keys:/app/keys:ro
+    environment:
+      - PAIP_CONFIG_PATH=/app/config/paip.yaml
+      - PAIP_LOG_LEVEL=DEBUG
+    command: ["python", "-m", "paip.main", "serve", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+    profiles:
+      - dev
