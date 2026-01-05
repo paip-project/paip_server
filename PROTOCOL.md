@@ -13,18 +13,19 @@ PAIP draws inspiration from the TLS/SSL certificate model, treating Identity Pro
 ## Table of Contents
 
 1. [Introduction](#1-introduction)
-2. [The Certificate Authority Analogy](#2-the-certificate-authority-analogy)
-3. [Terminology](#3-terminology)
-4. [Protocol Overview](#4-protocol-overview)
-5. [Agent Certificates](#5-agent-certificates)
-6. [Identity Provider Requirements](#6-identity-provider-requirements)
-7. [Discovery](#7-discovery)
-8. [Handshake](#8-handshake)
-9. [Session Tokens](#9-session-tokens)
-10. [Token Verification](#10-token-verification)
-11. [Claims](#11-claims)
-12. [Security Considerations](#12-security-considerations)
-13. [Examples](#13-examples)
+2. [Related Work](#2-related-work)
+3. [The Certificate Authority Analogy](#3-the-certificate-authority-analogy)
+4. [Terminology](#4-terminology)
+5. [Protocol Overview](#5-protocol-overview)
+6. [Agent Certificates](#6-agent-certificates)
+7. [Identity Provider Requirements](#7-identity-provider-requirements)
+8. [Discovery](#8-discovery)
+9. [Handshake](#9-handshake)
+10. [Session Tokens](#10-session-tokens)
+11. [Token Verification](#11-token-verification)
+12. [Claims](#12-claims)
+13. [Security Considerations](#13-security-considerations)
+14. [Examples](#14-examples)
 
 ---
 
@@ -80,9 +81,85 @@ PAIP provides a certificate-based framework where:
 
 ---
 
-## 2. The Certificate Authority Analogy
+## 2. Related Work
 
-### 2.1 How TLS Works
+As AI agents become capable of autonomous interaction with web services, multiple initiatives have emerged to address agent authentication and identity verification. This section provides context on related standards and explains how PAIP differs.
+
+### 2.1 OpenID Foundation Whitepaper on Agentic Identity
+
+The OpenID Foundation published ["Identity Management for Agentic AI"](https://openid.net/wp-content/uploads/2025/10/Identity-Management-for-Agentic-AI.pdf) (October 2025), a comprehensive whitepaper outlining requirements for agent authentication. Key challenges identified include:
+
+- Establishing trust between agents and services across trust boundaries
+- Binding agent actions to human principals (delegated authority vs. impersonation)
+- Credential lifecycle management and de-provisioning
+- Revocation propagation and audit trails
+- Recursive delegation and scope attenuation
+
+The whitepaper notes that current OAuth 2.1 frameworks work well "within single trust domains with synchronous agent operations" but "may fall short in scenarios that are cross-domain, highly autonomous, or asynchronous." PAIP directly addresses these cross-domain scenarios through its certificate-based model.
+
+### 2.2 Existing Approaches
+
+#### Identity and Authorization Standards
+
+| Approach | Focus | Relationship to PAIP |
+|----------|-------|---------------------|
+| **OAuth 2.1 / OpenID Connect** | Delegated user authorization | Complementary: handles user-to-app auth; PAIP handles agent-to-service proof-of-personhood |
+| **SPIFFE / SPIRE** | Workload identity within controlled infrastructure | Different scope: requires shared infrastructure visibility; doesn't cross trust boundaries |
+| **SCIM** | Identity lifecycle management (provisioning/de-provisioning) | Complementary: manages agent lifecycle; PAIP handles authentication |
+| **CIBA** | Asynchronous out-of-band authorization | Complementary: handles consent flows; PAIP handles identity verification |
+
+#### Agent-Specific Initiatives
+
+| Approach | Focus | Key Difference from PAIP |
+|----------|-------|--------------------------|
+| **MCP (Model Context Protocol)** | Agent-to-tool communication | Protocol for tool access; uses OAuth for auth; no proof-of-personhood |
+| **A2A (Agent-to-Agent Protocol)** | Inter-agent communication | Agent coordination protocol; leaves auth to OAuth; no human verification |
+| **OIDC-A (OpenID Connect for Agents)** | Agent identity claims extension | Proposed extension to OIDC; focuses on agent metadata, not certificate-based auth |
+| **Web Bot Auth** | Browser-level agent identification | Authenticates agent to web servers for scraping; different from API authentication |
+| **AP2 (Agent Payments Protocol)** | Intent verification for commerce | Google's protocol for agent purchases; focuses on transaction intent, not identity |
+
+#### Identity Providers (Not Protocols)
+
+| Provider | Focus | Relationship to PAIP |
+|----------|-------|---------------------|
+| **World ID** | Proof-of-personhood via iris scan | Potential PAIP-compatible IdP |
+| **Stytch** | Document + liveness verification | Potential PAIP-compatible IdP |
+| **ID.me** | Government ID verification | Potential PAIP-compatible IdP |
+
+### 2.3 The Gap PAIP Fills
+
+The OpenID whitepaper explicitly identifies a gap that PAIP addresses:
+
+> "Even robust workload identity frameworks like SPIFFE/SPIRE may not fully address the unique demands of agentic systems at scale... Agent identity must be enriched with metadata... Furthermore, because agents are designed to operate across organizational boundaries and act on behalf of users, their identities must be highly portable."
+
+PAIP fills this gap by providing:
+
+1. **Cross-domain portability**: Certificates work across trust boundaries without shared infrastructure
+2. **Proof-of-personhood binding**: Explicitly proves agents represent verified humans
+3. **IdP-agnostic design**: Works with any PAIP-compatible Identity Provider
+4. **Website-facing protocol**: Specifically designed for website backends to verify incoming agent requests
+5. **Cryptographic proof-of-possession**: Stolen certificates are useless without the agent's private key
+6. **Instant revocation**: CRL/OCSP support for immediate credential invalidation
+
+### 2.4 Complementary Standards
+
+PAIP is designed to work alongside existing standards, not replace them:
+
+- **OAuth 2.0 / OIDC**: PAIP does not replace OAuth for user-to-app authorization; it solves agent-to-service authentication with proof-of-personhood
+- **SPIFFE / SPIRE**: Use for internal workload identity; PAIP for external cross-domain authentication
+- **MCP / A2A**: Agents using these protocols can use PAIP when accessing external services that require human verification
+- **SCIM**: Use for agent lifecycle management; PAIP for authentication
+- **CIBA**: Use for asynchronous consent flows; PAIP for identity verification
+
+### 2.5 Design Philosophy
+
+The core insight is that multiple Identity Providers will emerge to verify human identity through various methods (documents, biometrics, blockchain, government databases, etc.). Rather than each website integrating with each IdP separately, PAIP provides a unified protocol for websites to accept credentials from any PAIP-compatible IdP—just as browsers accept TLS certificates from any trusted Certificate Authority
+
+---
+
+## 3. The Certificate Authority Analogy
+
+### 3.1 How TLS Works
 
 ```
 ┌─────────────────┐
@@ -108,11 +185,11 @@ PAIP provides a certificate-based framework where:
 
 **Key insight:** The certificate is long-lived (90 days to 1 year), but the server proves ownership in real-time by using its private key. No "login" or "password" - just possession of the private key.
 
-### 2.2 How PAIP Works
+### 3.2 How PAIP Works
 
 ```
 ┌─────────────────┐
-│ Identity        │  (Arbor ID, World ID, ID.me, etc.)
+│ Identity        │  (Stytch, World ID, ID.me, etc.)
 │ Provider (IdP)  │  Verifies humans are real
 └────────┬────────┘
          │ Signs
@@ -133,7 +210,7 @@ PAIP provides a certificate-based framework where:
 └─────────────────┘
 ```
 
-### 2.3 Why This Model?
+### 3.3 Why This Model?
 
 **Traditional OAuth tokens:**
 ```
@@ -153,7 +230,7 @@ Agent uses private key to prove identity → No re-login needed
 
 ---
 
-## 3. Terminology
+## 4. Terminology
 
 | Term | Definition |
 |------|------------|
@@ -169,9 +246,9 @@ Agent uses private key to prove identity → No re-login needed
 
 ---
 
-## 4. Protocol Overview
+## 5. Protocol Overview
 
-### 4.1 Architecture
+### 5.1 Architecture
 
 ```
 ┌──────────┐       ┌──────────────┐       ┌─────────────┐
@@ -213,7 +290,7 @@ Agent uses private key to prove identity → No re-login needed
          │    (locally or via /verify)           │
 ```
 
-### 4.2 Flow Summary
+### 5.2 Flow Summary
 
 1. **Certificate Issuance (one-time):** Human verifies identity with IdP, registers agent's public key, receives signed certificate
 2. **Discovery:** Agent fetches website's PAIP configuration to learn trusted IdPs
@@ -225,11 +302,11 @@ Agent uses private key to prove identity → No re-login needed
 
 ---
 
-## 5. Agent Certificates
+## 6. Agent Certificates
 
 Agent certificates are JWTs signed by Identity Providers that bind an agent's public key to a verified human identity.
 
-### 5.1 Certificate Format
+### 6.1 Certificate Format
 
 Agent certificates are JSON Web Tokens (JWT) with the following structure:
 
@@ -245,8 +322,8 @@ Agent certificates are JSON Web Tokens (JWT) with the following structure:
 **Payload:**
 ```json
 {
-  "iss": "https://arbor.id",
-  "sub": "arbor:jane_doe_abc123",
+  "iss": "https://stytch.com",
+  "sub": "stytch:jane_doe_abc123",
   "iat": 1704067200,
   "exp": 1711843200,
   "jti": "cert-uuid-here",
@@ -280,14 +357,14 @@ Agent certificates are JSON Web Tokens (JWT) with the following structure:
     },
 
     "revocation": {
-      "crl_url": "https://arbor.id/.well-known/crl.json",
-      "ocsp_url": "https://arbor.id/ocsp"
+      "crl_url": "https://stytch.com/.well-known/crl.json",
+      "ocsp_url": "https://stytch.com/ocsp"
     }
   }
 }
 ```
 
-### 5.2 Certificate Fields
+### 6.2 Certificate Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
@@ -309,7 +386,7 @@ Agent certificates are JSON Web Tokens (JWT) with the following structure:
 | `paip_cert.revocation.crl_url` | Yes | URL for Certificate Revocation List |
 | `paip_cert.revocation.ocsp_url` | No | URL for Online Certificate Status Protocol |
 
-### 5.3 Certificate Lifetime
+### 6.3 Certificate Lifetime
 
 - Certificates MUST NOT exceed 90 days validity
 - IdPs SHOULD default to 90 days
@@ -318,11 +395,11 @@ Agent certificates are JSON Web Tokens (JWT) with the following structure:
 
 ---
 
-## 6. Identity Provider Requirements
+## 7. Identity Provider Requirements
 
 To be PAIP-compatible, Identity Providers must implement the following.
 
-### 6.1 Trust Anchor Publication
+### 7.1 Trust Anchor Publication
 
 IdPs MUST publish their public keys at a well-known URL:
 
@@ -336,7 +413,7 @@ Response:
   "keys": [
     {
       "kty": "RSA",
-      "kid": "arbor-2025-01",
+      "kid": "stytch-2025-01",
       "use": "sig",
       "alg": "RS256",
       "n": "<modulus>",
@@ -346,7 +423,7 @@ Response:
 }
 ```
 
-### 6.2 Certificate Revocation List (CRL)
+### 7.2 Certificate Revocation List (CRL)
 
 IdPs MUST publish a Certificate Revocation List:
 
@@ -357,7 +434,7 @@ GET https://{idp}/.well-known/crl.json
 Response:
 ```json
 {
-  "issuer": "https://arbor.id",
+  "issuer": "https://stytch.com",
   "updated_at": "2025-01-04T12:00:00Z",
   "next_update": "2025-01-04T13:00:00Z",
   "revoked_certificates": [
@@ -377,7 +454,7 @@ Response:
 
 CRL SHOULD be updated at least hourly. PAIP servers SHOULD cache the CRL and refresh periodically.
 
-### 6.3 Online Certificate Status Protocol (OCSP) - Optional
+### 7.3 Online Certificate Status Protocol (OCSP) - Optional
 
 IdPs MAY provide an OCSP endpoint for real-time revocation checking:
 
@@ -396,7 +473,7 @@ Response:
 
 Status values: `valid`, `revoked`, `unknown`
 
-### 6.4 IdP Metadata
+### 7.4 IdP Metadata
 
 IdPs SHOULD publish metadata at:
 
@@ -407,12 +484,12 @@ GET https://{idp}/.well-known/paip-idp.json
 Response:
 ```json
 {
-  "issuer": "https://arbor.id",
-  "name": "Arbor ID",
+  "issuer": "https://stytch.com",
+  "name": "Stytch",
   "description": "Document-verified human identity for AI agents",
-  "jwks_uri": "https://arbor.id/.well-known/jwks.json",
-  "crl_uri": "https://arbor.id/.well-known/crl.json",
-  "ocsp_uri": "https://arbor.id/ocsp",
+  "jwks_uri": "https://stytch.com/.well-known/jwks.json",
+  "crl_uri": "https://stytch.com/.well-known/crl.json",
+  "ocsp_uri": "https://stytch.com/ocsp",
   "supported_claims": [
     "verified_human",
     "full_name",
@@ -429,17 +506,17 @@ Response:
 
 ---
 
-## 7. Discovery
+## 8. Discovery
 
 Websites publish their PAIP configuration at a well-known URL.
 
-### 7.1 Discovery Endpoint
+### 8.1 Discovery Endpoint
 
 ```
 GET https://{website}/.well-known/paip.json
 ```
 
-### 7.2 Discovery Document Schema
+### 8.2 Discovery Document Schema
 
 ```json
 {
@@ -448,9 +525,9 @@ GET https://{website}/.well-known/paip.json
   "paip_server": "https://paip.drsmith-derm.com",
   "trusted_identity_providers": [
     {
-      "issuer": "https://arbor.id",
-      "name": "Arbor ID",
-      "jwks_uri": "https://arbor.id/.well-known/jwks.json",
+      "issuer": "https://stytch.com",
+      "name": "Stytch",
+      "jwks_uri": "https://stytch.com/.well-known/jwks.json",
       "required_verification_methods": ["document_plus_liveness"]
     },
     {
@@ -479,11 +556,11 @@ GET https://{website}/.well-known/paip.json
 
 ---
 
-## 8. Handshake
+## 9. Handshake
 
 The handshake proves the agent holds a valid certificate and the corresponding private key.
 
-### 8.1 Handshake Request
+### 9.1 Handshake Request
 
 ```
 POST https://{paip_server}/handshake
@@ -498,7 +575,7 @@ Content-Type: application/json
 }
 ```
 
-### 8.2 Handshake Request Fields
+### 9.2 Handshake Request Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -508,7 +585,7 @@ Content-Type: application/json
 | `nonce` | string | Yes | Random string to prevent replay attacks |
 | `signature` | string | Yes | Agent's signature over `{audience}\|{timestamp}\|{nonce}` using its private key |
 
-### 8.3 Signature Generation
+### 9.3 Signature Generation
 
 The agent signs the concatenation of audience, timestamp, and nonce:
 
@@ -518,7 +595,7 @@ signature = sign(message, agent_private_key)
 signature_b64 = base64url_encode(signature)
 ```
 
-### 8.4 Handshake Verification
+### 9.4 Handshake Verification
 
 The PAIP server performs the following checks:
 
@@ -530,7 +607,7 @@ The PAIP server performs the following checks:
 6. **Check timestamp:** Must be within 5 minutes of server time
 7. **Check required claims:** Certificate must contain all claims required by the website
 
-### 8.5 Handshake Response (Success)
+### 9.5 Handshake Response (Success)
 
 ```json
 {
@@ -544,7 +621,7 @@ The PAIP server performs the following checks:
 }
 ```
 
-### 8.6 Handshake Response (Failure)
+### 9.6 Handshake Response (Failure)
 
 ```json
 {
@@ -556,7 +633,7 @@ The PAIP server performs the following checks:
 }
 ```
 
-### 8.7 Handshake Error Codes
+### 9.7 Handshake Error Codes
 
 | Code | Description |
 |------|-------------|
@@ -571,16 +648,16 @@ The PAIP server performs the following checks:
 
 ---
 
-## 9. Session Tokens
+## 10. Session Tokens
 
 After successful handshake, the PAIP server issues a short-lived session token.
 
-### 9.1 Token Structure
+### 10.1 Token Structure
 
 ```json
 {
   "iss": "https://paip.drsmith-derm.com",
-  "sub": "arbor:jane_doe_abc123",
+  "sub": "stytch:jane_doe_abc123",
   "aud": "https://drsmith-derm.com",
   "exp": 1704369600,
   "iat": 1704366000,
@@ -588,7 +665,7 @@ After successful handshake, the PAIP server issues a short-lived session token.
 
   "paip": {
     "version": "2.0",
-    "idp": "https://arbor.id",
+    "idp": "https://stytch.com",
     "certificate_jti": "cert-uuid-here",
     "claims": {
       "verified_human": true,
@@ -598,7 +675,7 @@ After successful handshake, the PAIP server issues a short-lived session token.
 }
 ```
 
-### 9.2 Token Lifetime
+### 10.2 Token Lifetime
 
 - Session tokens expire **1 hour** after issuance
 - Tokens are scoped to a **single audience** (website)
@@ -607,11 +684,11 @@ After successful handshake, the PAIP server issues a short-lived session token.
 
 ---
 
-## 10. Token Verification
+## 11. Token Verification
 
 Websites can verify session tokens using two methods.
 
-### 10.1 Local Verification (Recommended)
+### 11.1 Local Verification (Recommended)
 
 Fetch the PAIP server's public keys and verify locally:
 
@@ -619,7 +696,7 @@ Fetch the PAIP server's public keys and verify locally:
 GET https://{paip_server}/.well-known/jwks.json
 ```
 
-### 10.2 API Verification
+### 11.2 API Verification
 
 For backends without JWT libraries:
 
@@ -640,17 +717,17 @@ Response:
     "verified_human": true,
     "full_name": "Jane Doe"
   },
-  "idp": "https://arbor.id",
-  "subject": "arbor:jane_doe_abc123",
+  "idp": "https://stytch.com",
+  "subject": "stytch:jane_doe_abc123",
   "expires_at": "2025-01-04T16:30:00Z"
 }
 ```
 
 ---
 
-## 11. Claims
+## 12. Claims
 
-### 11.1 Standard Claims
+### 12.1 Standard Claims
 
 | Claim | Type | Description |
 |-------|------|-------------|
@@ -662,7 +739,7 @@ Response:
 | `phone_verified` | boolean | Whether phone was verified |
 | `organization` | string | Organization name (for org-type principals) |
 
-### 11.2 Namespaced Claims
+### 12.2 Namespaced Claims
 
 IdPs may provide additional domain-specific claims:
 
@@ -671,7 +748,7 @@ IdPs may provide additional domain-specific claims:
   "verified_human": true,
   "full_name": "Jane Doe",
 
-  "https://arbor.id/claims": {
+  "https://stytch.com/claims": {
     "verification_level": "enhanced",
     "document_type": "passport"
   }
@@ -680,15 +757,15 @@ IdPs may provide additional domain-specific claims:
 
 ---
 
-## 12. Security Considerations
+## 13. Security Considerations
 
-### 12.1 Private Key Security
+### 13.1 Private Key Security
 
 - Agent private keys MUST be stored securely (not in plain text)
 - Recommended: Hardware security modules, OS keychains, or cloud KMS
 - Private keys MUST NEVER be transmitted
 
-### 12.2 Certificate Theft
+### 13.2 Certificate Theft
 
 Unlike OAuth tokens, stolen certificates are **useless without the private key**:
 
@@ -698,13 +775,13 @@ Unlike OAuth tokens, stolen certificates are **useless without the private key**
 | Certificate only | Cannot generate valid signatures |
 | Certificate + private key | Full impersonation until revoked |
 
-### 12.3 Revocation
+### 13.3 Revocation
 
 - IdPs MUST support instant revocation
 - PAIP servers MUST check revocation status during handshake
 - Users SHOULD be able to revoke certificates via IdP dashboard
 
-### 12.4 Replay Attacks
+### 13.4 Replay Attacks
 
 The handshake includes timestamp and nonce to prevent replay:
 
@@ -712,24 +789,24 @@ The handshake includes timestamp and nonce to prevent replay:
 - Nonce ensures each handshake request is unique
 - PAIP servers MAY track recent nonces to reject duplicates
 
-### 12.5 Transport Security
+### 13.5 Transport Security
 
 - All endpoints MUST use HTTPS
 - TLS 1.2+ REQUIRED
 
 ---
 
-## 13. Examples
+## 14. Examples
 
-### 13.1 Complete Flow
+### 14.1 Complete Flow
 
 **Scenario:** Jane wants her AI agent to book a dermatology appointment.
 
 **One-time setup (already completed):**
-1. Jane verified her identity with Arbor ID (document + liveness check)
+1. Jane verified her identity with Stytch (document + liveness check)
 2. Jane's agent generated a keypair
-3. Jane registered the agent's public key with Arbor ID
-4. Arbor ID issued a 90-day agent certificate
+3. Jane registered the agent's public key with Stytch
+4. Stytch issued a 90-day agent certificate
 
 **Booking flow:**
 
@@ -744,7 +821,7 @@ Response:
   "name": "Dr. Smith's Dermatology",
   "paip_server": "https://paip.drsmith-derm.com",
   "trusted_identity_providers": [
-    {"issuer": "https://arbor.id", "name": "Arbor ID"}
+    {"issuer": "https://stytch.com", "name": "Stytch"}
   ],
   "required_claims": ["verified_human", "full_name"]
 }
