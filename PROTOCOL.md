@@ -33,6 +33,8 @@ PAIP draws inspiration from the TLS/SSL certificate model, treating Identity Pro
 
 ### 1.1 Problem Statement
 
+> **From CAPTCHAs to Certificates:** For decades, CAPTCHAs have asked "are you a human?" to distinguish people from bots. But in an agent-powered world, this question no longer makes sense—agents *are* software, and that's the point. The right question becomes: **"Does this agent represent a verified human?"** PAIP answers this question through cryptographic certificates rather than puzzle-solving.
+
 As AI agents become increasingly capable of interacting with web services on behalf of users, websites face a fundamental trust problem: **how do they know an agent represents a real person?**
 
 Consider a dermatology clinic that wants to allow patients' AI agents to book appointments. If they expose a booking API without verification:
